@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محاكاة السحب العميق - معالجة ثبات الماسك ومنع التداخل</title>
+    <!-- مكتبة Three.js ومتحكم الكاميرا -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b1120;
+            --panel-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --punch-color: #3b82f6;
+            --die-color: #475569;
+            --holder-color: #f59e0b;
+            --sheet-color: #ef4444;
+            --text-color: #f8fafc;
+            --border-color: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 15px;
+            overflow-x: hidden;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        header h1 {
+            font-size: 1.6rem;
+            color: var(--accent-color);
+            margin-bottom: 4px;
+        }
+
+        header p {
+            color: #94a3b8;
+            font-size: 0.88rem;
+        }
+
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            max-width: 1300px;
+            width: 100%;
+        }
+
+        .canvas-card {
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border-color);
+            position: relative;
+            flex: 1 1 720px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* شريط التبديل وإعدادات الرؤية */
+        .view-switch-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #0f172a;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .switch-tabs {
+            display: flex;
+            gap: 6px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: #94a3b8;
+            border: none;
+            padding: 6px 18px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: #0284c7;
+            color: white;
+            box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+        }
+
+        /* مربعات اختيار إخفاء وإظهار الأجزاء */
+        .visibility-panel {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #1e293b;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            font-size: 0.82rem;
+        }
+
+        .visibility-panel label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .visibility-panel input[type="checkbox"] {
+            accent-color: var(--accent-color);
+            cursor: pointer;
+            width: 14px;
+            height: 14px;
+        }
+
+        /* حاويات العرض */
+        .display-viewport {
+            width: 100%;
+            height: 560px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #070b14;
+            position: relative;
+        }
+
+        canvas#simCanvas2D {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #webgl-container {
+            width: 100%;
+            height: 100%;
+            display: none;
+            cursor: grab;
+        }
+
+        #webgl-container:active {
+            cursor: grabbing;
+        }
+
+        /* لوحة التحكم */
+        .controls-card {
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--border-color);
+            width: 360px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .control-group span.val {
+            color: var(--accent-color);
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent-color);
+            cursor: pointer;
+            height: 6px;
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        .quick-angles {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+            margin-top: 2px;
+        }
+
+        .quick-btn {
+            background: #243248;
+            color: #94a3b8;
+            border: 1px solid #334155;
+            padding: 4px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .quick-btn:hover {
+            background: #334155;
+            color: white;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        button.action-btn {
+            background: #334155;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #0284c7;
+            grid-column: span 2;
+        }
+
+        button.primary:hover { background: #0369a1; }
+
+        .readouts {
+            background: #070b14;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.8rem;
+        }
+
+        .readout-item {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed #334155;
+            padding-bottom: 3px;
+        }
+
+        .readout-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.75rem;
+        }
+
+        .safe { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+        .danger { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
+        .wrinkle { background: rgba(168, 85, 247, 0.25); color: #c084fc; border: 1px solid #a855f7; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>محاكاة عملية السحب العميق (Deep Drawing)</h1>
+        <p>Created By Dr. Jalil J. Shukur</p>
+    </header>
+
+    <div class="main-container">
+        <div class="canvas-card">
+            <div class="view-switch-bar">
+                <!-- أزرار التبديل 2D / 3D -->
+                <div class="switch-tabs">
+                    <button id="btn2D" class="tab-btn active" onclick="switchView('2D')">عرض 2D (الافتراضي)</button>
+                    <button id="btn3D" class="tab-btn" onclick="switchView('3D')">عرض مجسم 3D</button>
+                </div>
+
+                <!-- مربعات إخفاء وإظهار الأجزاء للتركيز -->
+                <div class="visibility-panel">
+                    <span style="color:#94a3b8; font-weight:bold;">إظهار:</span>
+                    <label style="color:#60a5fa;"><input type="checkbox" id="chkPunch" checked> السنبك (Punch)</label>
+                    <label style="color:#94a3b8;"><input type="checkbox" id="chkDie" checked> القالب (Die)</label>
+                    <label style="color:#f59e0b;"><input type="checkbox" id="chkHolder" checked> الماسك (Holder)</label>
+                </div>
+            </div>
+
+            <div class="display-viewport">
+                <!-- العرض ثنائي الأبعاد 2D (الافتراضي) -->
+                <canvas id="simCanvas2D" width="800" height="560"></canvas>
+                <!-- العرض ثلاثي الأبعاد 3D -->
+                <div id="webgl-container"></div>
+            </div>
+        </div>
+
+        <!-- لوحة التحكم المشتركة -->
+        <div class="controls-card">
+            <!-- زاوية الشريحة لـ 3D -->
+            <div class="control-group" id="angleControlGroup">
+                <label>
+                    زاوية شريحة العرض (3D Cutaway):
+                    <span class="val" id="angleVal">90° (ربع)</span>
+                </label>
+                <input type="range" id="angleSlider" min="45" max="270" value="90" step="5">
+                <div class="quick-angles">
+                    <button class="quick-btn" onclick="setAngle(90)">90° ربع</button>
+                    <button class="quick-btn" onclick="setAngle(180)">180° نصف</button>
+                    <button class="quick-btn" onclick="setAngle(270)">270° قطاع</button>
+                </div>
+            </div>
+
+            <!-- سمك البلانكة -->
+            <div class="control-group">
+                <label>
+                    سمك البلانكة (Thickness - t):
+                    <span class="val" id="thickVal">1.2 mm</span>
+                </label>
+                <input type="range" id="thickSlider" min="0.5" max="2.5" value="1.2" step="0.1">
+            </div>
+
+            <!-- قوة المسك BHF -->
+            <div class="control-group">
+                <label>
+                    قوة ماسك البلانكة (BHF):
+                    <span class="val" id="bhfVal" style="color:#f59e0b;">25 kN</span>
+                </label>
+                <input type="range" id="bhfSlider" min="0" max="40" value="25" step="1">
+            </div>
+
+            <!-- قطر البلانكة -->
+            <div class="control-group">
+                <label>
+                    قطر القرص (Blank Dia - D₀):
+                    <span class="val" id="blankVal">260 mm</span>
+                </label>
+                <input type="range" id="blankSlider" min="160" max="380" value="260" step="5">
+            </div>
+
+            <!-- سرعة الحركة -->
+            <div class="control-group">
+                <label>
+                    سرعة الحركة:
+                    <span class="val" id="speedVal">1x</span>
+                </label>
+                <input type="range" id="speedSlider" min="0.5" max="2.0" value="1" step="0.1">
+            </div>
+
+            <div class="btn-group">
+                <button class="action-btn primary" id="playBtn">إيقاف مؤقت</button>
+                <button class="action-btn" id="resetBtn">إعادة ضبط</button>
+                <button class="action-btn" id="stepBtn">تقديم خطوة</button>
+            </div>
+
+            <div class="readouts">
+                <div class="readout-item">
+                    <span>حالة تجعد الشفة (Wrinkling):</span>
+                    <span id="wrinkleBadge" class="status-badge safe">سحب سليم ومستوٍ</span>
+                </div>
+                <div class="readout-item">
+                    <span>الخلوص المحسوب (c = 1.1t):</span>
+                    <span id="readoutC" style="color:#38bdf8;">1.32 mm</span>
+                </div>
+                <div class="readout-item">
+                    <span>قطر القالب الداخلي (Dd):</span>
+                    <span id="readoutDd" style="color:#38bdf8;">122.64 mm</span>
+                </div>
+                <div class="readout-item">
+                    <span>ارتفاع القدح المحسوب:</span>
+                    <span id="cupHeightVal" style="color:#4ade80; font-weight:bold;">82 mm</span>
+                </div>
+                <div class="readout-item">
+                    <span>نسبة السحب (D₀ / dp):</span>
+                    <span id="ratioVal">2.16</span>
+                </div>
+                <div class="readout-item">
+                    <span>حالة التشكيل:</span>
+                    <span id="statusBadge" class="status-badge danger">خطر التمزق (> 2.0)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================= الأبعاد الهندسية =================
+        let currentView = '2D'; // الوضع الافتراضي ثنائي الأبعاد
+        const PUNCH_RADIUS = 60;   // نصف قطر السنبك = 60mm (dp = 120)
+        const PUNCH_FILLET = 15;   // rp = 15mm
+        const DIE_FILLET = 15;     // rd = 15mm
+
+        const CX_2D = 400;
+        const DIE_SURFACE_Y_2D = 230;
+        const DIE_HEIGHT_2D = 85;
+
+        let sliceAngleDeg = 90;
+        let sliceAngleRad = Math.PI * 0.5;
+        let bhf = 25;
+        let t_mm = 1.2;
+        let blankRadius = 130;
+        let speedMult = 1.0;
+        let isPlaying = true;
+        let animationDirection = 1;
+        let wavePhase = 0;
+
+        let clearance_mm = 1.32;
+        let dieRadius = 61.32;
+        let critBHF = 18;
+        let wrinkleSeverity = 0;
+        let maxStroke = 120;
+        let strokeProgress = 0;
+
+        // خيارات الرؤية
+        let showPunch = true;
+        let showDie = true;
+        let showHolder = true;
+
+        // عناصر الواجهة
+        const canvas2D = document.getElementById('simCanvas2D');
+        const ctx2D = canvas2D.getContext('2d');
+        const webglContainer = document.getElementById('webgl-container');
+        const btn2D = document.getElementById('btn2D');
+        const btn3D = document.getElementById('btn3D');
+
+        const chkPunch = document.getElementById('chkPunch');
+        const chkDie = document.getElementById('chkDie');
+        const chkHolder = document.getElementById('chkHolder');
+
+        const angleSlider = document.getElementById('angleSlider');
+        const angleVal = document.getElementById('angleVal');
+        const bhfSlider = document.getElementById('bhfSlider');
+        const bhfVal = document.getElementById('bhfVal');
+        const thickSlider = document.getElementById('thickSlider');
+        const thickVal = document.getElementById('thickVal');
+        const blankSlider = document.getElementById('blankSlider');
+        const blankVal = document.getElementById('blankVal');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedVal = document.getElementById('speedVal');
+        const playBtn = document.getElementById('playBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const stepBtn = document.getElementById('stepBtn');
+
+        const wrinkleBadge = document.getElementById('wrinkleBadge');
+        const readoutC = document.getElementById('readoutC');
+        const readoutDd = document.getElementById('readoutDd');
+        const cupHeightVal = document.getElementById('cupHeightVal');
+        const ratioVal = document.getElementById('ratioVal');
+        const statusBadge = document.getElementById('statusBadge');
+
+        // ================= مشهد Three.js 3D =================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a1122);
+
+        const camera = new THREE.PerspectiveCamera(40, canvas2D.clientWidth / canvas2D.clientHeight, 1, 2000);
+        camera.position.set(190, 170, 260);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(canvas2D.clientWidth, canvas2D.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        webglContainer.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, -25, 0);
+
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.85);
+        scene.add(ambLight);
+
+        const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight1.position.set(200, 300, 200);
+        scene.add(dirLight1);
+
+        const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.4);
+        dirLight2.position.set(-200, 100, -200);
+        scene.add(dirLight2);
+
+        const grid = new THREE.GridHelper(450, 30, 0x1e3a8a, 0x1e293b);
+        grid.position.y = -DIE_HEIGHT_2D - 35;
+        scene.add(grid);
+
+        const punchGroup3D = new THREE.Group();
+        const dieGroup3D = new THREE.Group();
+        const holderGroup3D = new THREE.Group();
+        let sheetMesh3D = null;
+
+        scene.add(punchGroup3D);
+        scene.add(dieGroup3D);
+        scene.add(holderGroup3D);
+
+        const matPunch3D = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide });
+        const matDie3D = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.5, roughness: 0.45, side: THREE.DoubleSide });
+        const matHolder3D = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.5, roughness: 0.35, side: THREE.DoubleSide });
+        const matSheet3D = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.4, roughness: 0.35, side: THREE.DoubleSide });
+
+        // ================= تحديث الحسابات =================
+        function updateFormulas() {
+            clearance_mm = t_mm * 1.1;
+            dieRadius = PUNCH_RADIUS + clearance_mm;
+            const dieDiameter_mm = (PUNCH_RADIUS * 2) + (2 * clearance_mm);
+
+            critBHF = Math.round(16 * (blankRadius * 2 / 260) * Math.pow(1.0 / t_mm, 0.65));
+            critBHF = Math.max(8, Math.min(36, critBHF));
+
+            if (bhf < critBHF) {
+                wrinkleSeverity = (critBHF - bhf) / critBHF;
+                wrinkleBadge.textContent = bhf === 0 ? "تجعد حاد (BHF=0)" : `تجعد بارز (${Math.round(wrinkleSeverity * 100)}%)`;
+                wrinkleBadge.className = "status-badge wrinkle";
+            } else {
+                wrinkleSeverity = 0;
+                wrinkleBadge.textContent = "سحب سليم ومستوٍ";
+                wrinkleBadge.className = "status-badge safe";
+            }
+
+            readoutC.textContent = `${clearance_mm.toFixed(2)} mm`;
+            readoutDd.textContent = `${dieDiameter_mm.toFixed(2)} mm`;
+
+            const D0 = blankRadius * 2;
+            const dp = PUNCH_RADIUS * 2;
+            let estHeight = (Math.pow(D0, 2) - Math.pow(dp, 2)) / (4 * dp);
+            estHeight = Math.max(10, estHeight);
+            cupHeightVal.textContent = `${Math.round(estHeight)} mm`;
+
+            const ratio = (D0 / dp).toFixed(2);
+            ratioVal.textContent = ratio;
+
+            if (ratio <= 2.0) {
+                statusBadge.textContent = "سحب آمن (ناجح)";
+                statusBadge.className = "status-badge safe";
+            } else {
+                statusBadge.textContent = "تمزق حتمي للمعدن (> 2.0)";
+                statusBadge.className = "status-badge danger";
+            }
+
+            maxStroke = Math.min(220, estHeight + 70);
+        }
+
+        // بناء مجسمات 3D مصمتة وسد أوجه القطع
+        function createSolidLatheMesh(points2D, phiLen, material) {
+            const group = new THREE.Group();
+            const segments = Math.max(16, Math.round((phiLen / (Math.PI * 2)) * 48));
+
+            const latheGeo = new THREE.LatheGeometry(points2D, segments, 0, phiLen);
+            group.add(new THREE.Mesh(latheGeo, material));
+
+            const triangles = THREE.ShapeUtils.triangulateShape(points2D, []);
+
+            // وجه 0
+            const capGeo0 = new THREE.BufferGeometry();
+            const pos0 = [];
+            for (let i = 0; i < points2D.length; i++) pos0.push(0, points2D[i].y, points2D[i].x);
+            const idx0 = [];
+            for (let t = 0; t < triangles.length; t++) idx0.push(triangles[t][0], triangles[t][1], triangles[t][2]);
+            capGeo0.setAttribute('position', new THREE.Float32BufferAttribute(pos0, 3));
+            capGeo0.setIndex(idx0);
+            capGeo0.computeVertexNormals();
+            group.add(new THREE.Mesh(capGeo0, material));
+
+            // وجه phiLen
+            const capGeoPhi = new THREE.BufferGeometry();
+            const posPhi = [];
+            const sinP = Math.sin(phiLen);
+            const cosP = Math.cos(phiLen);
+            for (let i = 0; i < points2D.length; i++) posPhi.push(points2D[i].x * sinP, points2D[i].y, points2D[i].x * cosP);
+            const idxPhi = [];
+            for (let t = 0; t < triangles.length; t++) idxPhi.push(triangles[t][0], triangles[t][2], triangles[t][1]);
+            capGeoPhi.setAttribute('position', new THREE.Float32BufferAttribute(posPhi, 3));
+            capGeoPhi.setIndex(idxPhi);
+            capGeoPhi.computeVertexNormals();
+            group.add(new THREE.Mesh(capGeoPhi, material));
+
+            return group;
+        }
+
+        function rebuild3DGeometries() {
+            while (punchGroup3D.children.length) punchGroup3D.remove(punchGroup3D.children[0]);
+            while (dieGroup3D.children.length) dieGroup3D.remove(dieGroup3D.children[0]);
+            while (holderGroup3D.children.length) holderGroup3D.remove(holderGroup3D.children[0]);
+
+            // 1. السنبك 3D
+            const punchPoints = [
+                new THREE.Vector2(0, 0),
+                new THREE.Vector2(PUNCH_RADIUS - PUNCH_FILLET, 0)
+            ];
+            for (let i = 0; i <= 6; i++) {
+                const a = (i / 6) * (Math.PI / 2);
+                punchPoints.push(new THREE.Vector2(
+                    (PUNCH_RADIUS - PUNCH_FILLET) + PUNCH_FILLET * Math.sin(a),
+                    PUNCH_FILLET - PUNCH_FILLET * Math.cos(a)
+                ));
+            }
+            punchPoints.push(new THREE.Vector2(PUNCH_RADIUS, 160));
+            punchPoints.push(new THREE.Vector2(0, 160));
+            punchGroup3D.add(createSolidLatheMesh(punchPoints, sliceAngleRad, matPunch3D));
+
+            // 2. القالب 3D (سطحه العلوي عند Y = 0)
+            const dieOuterR = dieRadius + DIE_FILLET + 95;
+            const diePoints = [
+                new THREE.Vector2(dieRadius, -DIE_HEIGHT_2D),
+                new THREE.Vector2(dieRadius, -DIE_FILLET)
+            ];
+            for (let i = 0; i <= 6; i++) {
+                const a = (i / 6) * (Math.PI / 2);
+                diePoints.push(new THREE.Vector2(
+                    (dieRadius + DIE_FILLET) - DIE_FILLET * Math.cos(a),
+                    -DIE_FILLET + DIE_FILLET * Math.sin(a)
+                ));
+            }
+            diePoints.push(new THREE.Vector2(dieOuterR, 0));
+            diePoints.push(new THREE.Vector2(dieOuterR, -DIE_HEIGHT_2D));
+            dieGroup3D.add(createSolidLatheMesh(diePoints, sliceAngleRad, matDie3D));
+
+            // 3. ماسك البلانكة 3D (ثابت عند منسوب الصاج Y = t_mm دون حركة)
+            const holderInnerR = dieRadius + DIE_FILLET + 3;
+            const holderOuterR = dieOuterR - 8;
+            const holderPoints = [
+                new THREE.Vector2(holderInnerR, 0),
+                new THREE.Vector2(holderOuterR, 0),
+                new THREE.Vector2(holderOuterR, 20),
+                new THREE.Vector2(holderInnerR, 20)
+            ];
+            holderGroup3D.add(createSolidLatheMesh(holderPoints, sliceAngleRad, matHolder3D));
+            holderGroup3D.position.y = t_mm; // ثابت تماماً ومحكم فوق الصاج
+        }
+
+        // ================= رسم البلانكة 3D مع حل مشكلة التداخل واختراق القالب =================
+        function update3DSheet(penetration) {
+            const transitionDepth = PUNCH_FILLET + DIE_FILLET + t_mm;
+            let wrinkleAmp = (wrinkleSeverity > 0 && penetration > 0) ? wrinkleSeverity * 6.5 * Math.min(1.0, penetration / 40) : 0;
+
+            const profile = [];
+            const sheetRestY = t_mm / 2;
+
+            if (penetration <= 0) {
+                profile.push({ r: 0, y: sheetRestY });
+                profile.push({ r: blankRadius, y: sheetRestY });
+            } else if (penetration < transitionDepth) {
+                const u = penetration / transitionDepth;
+                const curEdgeR = blankRadius - (penetration * 0.22);
+                const punchFlatEnd = (PUNCH_RADIUS - PUNCH_FILLET) * u;
+                const dieStartR = dieRadius + DIE_FILLET;
+
+                profile.push({ r: 0, y: -penetration + sheetRestY });
+                profile.push({ r: punchFlatEnd, y: -penetration + sheetRestY });
+
+                const midR = (punchFlatEnd + dieStartR) / 2;
+                for (let i = 1; i <= 8; i++) {
+                    const frac = i / 8;
+                    const r = (1 - frac) * (1 - frac) * punchFlatEnd + 2 * (1 - frac) * frac * midR + frac * frac * dieStartR;
+                    const y = (1 - frac) * (1 - frac) * (-penetration + sheetRestY) + 2 * (1 - frac) * frac * (-penetration * 0.25) + frac * frac * sheetRestY;
+                    profile.push({ r, y });
+                }
+                profile.push({ r: curEdgeR, y: sheetRestY });
+            } else {
+                const wallHeight = penetration - transitionDepth;
+                const punchCornerArc = (Math.PI / 2) * (PUNCH_FILLET + t_mm / 2);
+                const dieCornerArc = (Math.PI / 2) * (DIE_FILLET + t_mm / 2);
+                const drawnIn = (PUNCH_RADIUS - PUNCH_FILLET) + punchCornerArc + wallHeight + dieCornerArc;
+                const remainingFlange = blankRadius - drawnIn;
+                const bottomY = -penetration + sheetRestY;
+
+                profile.push({ r: 0, y: bottomY });
+                profile.push({ r: PUNCH_RADIUS - PUNCH_FILLET, y: bottomY });
+
+                for (let i = 1; i <= 6; i++) {
+                    const a = (i / 6) * (Math.PI / 2);
+                    profile.push({
+                        r: (PUNCH_RADIUS - PUNCH_FILLET) + (PUNCH_FILLET + t_mm / 2) * Math.sin(a),
+                        y: bottomY + (PUNCH_FILLET + t_mm / 2) * (1 - Math.cos(a))
+                    });
+                }
+
+                if (remainingFlange > 0) {
+                    profile.push({ r: PUNCH_RADIUS + t_mm / 2, y: -DIE_FILLET });
+                    for (let i = 1; i <= 6; i++) {
+                        const a = (i / 6) * (Math.PI / 2);
+                        profile.push({
+                            r: (dieRadius + DIE_FILLET) - (DIE_FILLET + t_mm / 2) * Math.cos(a),
+                            y: -DIE_FILLET + (DIE_FILLET + t_mm / 2) * Math.sin(a)
+                        });
+                    }
+                    profile.push({ r: dieRadius + DIE_FILLET + remainingFlange, y: sheetRestY });
+                } else {
+                    const fullCupWall = blankRadius - ((PUNCH_RADIUS - PUNCH_FILLET) + punchCornerArc);
+                    profile.push({ r: PUNCH_RADIUS + t_mm / 2, y: bottomY + fullCupWall });
+                }
+            }
+
+            const radialSteps = profile.length;
+            const angularSteps = Math.max(16, Math.round((sliceAngleRad / (Math.PI * 2)) * 48));
+            const vertices = [];
+            const indices = [];
+
+            for (let j = 0; j <= angularSteps; j++) {
+                const phi = (j / angularSteps) * sliceAngleRad;
+                const sinP = Math.sin(phi);
+                const cosP = Math.cos(phi);
+
+                for (let i = 0; i < radialSteps; i++) {
+                    const pt = profile[i];
+                    let py = pt.y;
+
+                    // [حل مشكلة التداخل في 3D]: التجعد ينبعج للأعلى فقط ولا يخترق منسوب القالب
+                    if (wrinkleAmp > 0.1 && pt.r >= (dieRadius + DIE_FILLET)) {
+                        const f = Math.min(1.0, (pt.r - (dieRadius + DIE_FILLET)) / 45);
+                        // معادلة موجبة دائماً >= 0 تمنع أي هبوط تحت سطح القالب
+                        const upwardRipple = (1.0 - Math.cos(phi * 14 + wavePhase)) * 0.5;
+                        py += (upwardRipple * wrinkleAmp * f);
+                    }
+
+                    vertices.push(pt.r * sinP, py, pt.r * cosP);
+                }
+            }
+
+            for (let j = 0; j < angularSteps; j++) {
+                for (let i = 0; i < radialSteps - 1; i++) {
+                    const a = j * radialSteps + i;
+                    const b = (j + 1) * radialSteps + i;
+                    const c = (j + 1) * radialSteps + (i + 1);
+                    const d = j * radialSteps + (i + 1);
+                    indices.push(a, b, d, b, c, d);
+                }
+            }
+
+            if (sheetMesh3D) scene.remove(sheetMesh3D);
+            const sheetGeo = new THREE.BufferGeometry();
+            sheetGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            sheetGeo.setIndex(indices);
+            sheetGeo.computeVertexNormals();
+
+            sheetMesh3D = new THREE.Mesh(sheetGeo, matSheet3D);
+            scene.add(sheetMesh3D);
+        }
+
+        // ================= رسم العرض ثنائي الأبعاد 2D الفائق الدقة (الماسك ثابت تماماً) =================
+        function render2D(penetration) {
+            ctx2D.clearRect(0, 0, canvas2D.width, canvas2D.height);
+
+            const sheetThickPx = t_mm * 12;
+            const clearancePx = clearance_mm * 12;
+            const dieRadiusPx = PUNCH_RADIUS + clearancePx;
+            const sheetRestY = DIE_SURFACE_Y_2D - sheetThickPx / 2;
+
+            // شبكة خلفية
+            ctx2D.strokeStyle = '#141d2e';
+            ctx2D.lineWidth = 1;
+            for (let x = 0; x < canvas2D.width; x += 30) {
+                ctx2D.beginPath(); ctx2D.moveTo(x, 0); ctx2D.lineTo(x, canvas2D.height); ctx2D.stroke();
+            }
+            for (let y = 0; y < canvas2D.height; y += 30) {
+                ctx2D.beginPath(); ctx2D.moveTo(0, y); ctx2D.lineTo(canvas2D.width, y); ctx2D.stroke();
+            }
+
+            // 1. رسم القالب (إذا كان مفعلاً)
+            if (showDie) {
+                const dieH = DIE_HEIGHT_2D;
+                const dieW = 160;
+                ctx2D.fillStyle = '#475569';
+                ctx2D.strokeStyle = '#94a3b8';
+                ctx2D.lineWidth = 1.5;
+
+                // أيسر
+                ctx2D.beginPath();
+                ctx2D.moveTo(CX_2D - dieRadiusPx - DIE_FILLET - dieW, DIE_SURFACE_Y_2D);
+                ctx2D.lineTo(CX_2D - dieRadiusPx - DIE_FILLET, DIE_SURFACE_Y_2D);
+                ctx2D.arcTo(CX_2D - dieRadiusPx, DIE_SURFACE_Y_2D, CX_2D - dieRadiusPx, DIE_SURFACE_Y_2D + DIE_FILLET, DIE_FILLET);
+                ctx2D.lineTo(CX_2D - dieRadiusPx, DIE_SURFACE_Y_2D + dieH);
+                ctx2D.lineTo(CX_2D - dieRadiusPx - DIE_FILLET - dieW, DIE_SURFACE_Y_2D + dieH);
+                ctx2D.closePath();
+                ctx2D.fill(); ctx2D.stroke();
+
+                // أيمن
+                ctx2D.beginPath();
+                ctx2D.moveTo(CX_2D + dieRadiusPx + DIE_FILLET + dieW, DIE_SURFACE_Y_2D);
+                ctx2D.lineTo(CX_2D + dieRadiusPx + DIE_FILLET, DIE_SURFACE_Y_2D);
+                ctx2D.arcTo(CX_2D + dieRadiusPx, DIE_SURFACE_Y_2D, CX_2D + dieRadiusPx, DIE_SURFACE_Y_2D + DIE_FILLET, DIE_FILLET);
+                ctx2D.lineTo(CX_2D + dieRadiusPx, DIE_SURFACE_Y_2D + dieH);
+                ctx2D.lineTo(CX_2D + dieRadiusPx + DIE_FILLET + dieW, DIE_SURFACE_Y_2D + dieH);
+                ctx2D.closePath();
+                ctx2D.fill(); ctx2D.stroke();
+            }
+
+            // 2. رسم ماسك البلانكة الثابت تماماً (لا يرتفع ولا يتغير موضعه أبداً)
+            if (showHolder) {
+                const holderH = 26;
+                const holderW = 145;
+                // [حل مشكلة الارتفاع في 2D]: الماسك ثابت تماماً وملاصق لمنسوب الصاج دائماً
+                const holderY = DIE_SURFACE_Y_2D - sheetThickPx - holderH;
+
+                ctx2D.fillStyle = '#f59e0b';
+                ctx2D.strokeStyle = '#fcd34d';
+                ctx2D.fillRect(CX_2D - dieRadiusPx - DIE_FILLET - holderW, holderY, holderW, holderH);
+                ctx2D.strokeRect(CX_2D - dieRadiusPx - DIE_FILLET - holderW, holderY, holderW, holderH);
+                ctx2D.fillRect(CX_2D + dieRadiusPx + DIE_FILLET, holderY, holderW, holderH);
+                ctx2D.strokeRect(CX_2D + dieRadiusPx + DIE_FILLET, holderY, holderW, holderH);
+            }
+
+            // 3. موضع السنبك الدقيق
+            const punchTouchY = DIE_SURFACE_Y_2D - sheetThickPx;
+            const punchBottomY = punchTouchY + penetration;
+            const punchTopY = punchBottomY - 180;
+
+            // 4. رسم البلانكة (دائماً تُرسم)
+            ctx2D.strokeStyle = '#ef4444';
+            ctx2D.lineWidth = sheetThickPx;
+            ctx2D.lineCap = 'round';
+            ctx2D.lineJoin = 'round';
+
+            const transitionDepth2D = PUNCH_FILLET + DIE_FILLET + sheetThickPx;
+            const sheetCenterlineBottomY = punchBottomY + sheetThickPx / 2;
+
+            ctx2D.beginPath();
+            if (penetration <= 0) {
+                ctx2D.moveTo(CX_2D - blankRadius, sheetRestY);
+                ctx2D.lineTo(CX_2D + blankRadius, sheetRestY);
+            } else if (penetration < transitionDepth2D) {
+                const u = penetration / transitionDepth2D;
+                const curEdgeR = blankRadius - (penetration * 0.22);
+                const leftPunchEnd = CX_2D - (PUNCH_RADIUS - PUNCH_FILLET) * u;
+                const rightPunchEnd = CX_2D + (PUNCH_RADIUS - PUNCH_FILLET) * u;
+
+                ctx2D.moveTo(CX_2D - curEdgeR, sheetRestY);
+                ctx2D.lineTo(CX_2D - dieRadiusPx - DIE_FILLET, sheetRestY);
+
+                const midX_Left = (CX_2D - dieRadiusPx - DIE_FILLET + leftPunchEnd) / 2;
+                ctx2D.bezierCurveTo(midX_Left, sheetRestY, midX_Left, sheetCenterlineBottomY, leftPunchEnd, sheetCenterlineBottomY);
+
+                ctx2D.lineTo(rightPunchEnd, sheetCenterlineBottomY);
+
+                const midX_Right = (CX_2D + dieRadiusPx + DIE_FILLET + rightPunchEnd) / 2;
+                ctx2D.bezierCurveTo(midX_Right, sheetCenterlineBottomY, midX_Right, sheetRestY, CX_2D + dieRadiusPx + DIE_FILLET, sheetRestY);
+
+                ctx2D.lineTo(CX_2D + curEdgeR, sheetRestY);
+            } else {
+                const wallHeight = penetration - transitionDepth2D;
+                const punchCornerArc = (Math.PI / 2) * (PUNCH_FILLET + sheetThickPx / 2);
+                const dieCornerArc = (Math.PI / 2) * (DIE_FILLET + sheetThickPx / 2);
+                const drawnIn = (PUNCH_RADIUS - PUNCH_FILLET) + punchCornerArc + wallHeight + dieCornerArc;
+                const remainingFlange = blankRadius - drawnIn;
+
+                const sheetWallLeft = CX_2D - PUNCH_RADIUS - sheetThickPx / 2;
+                const sheetWallRight = CX_2D + PUNCH_RADIUS + sheetThickPx / 2;
+                const punchFilletTopY = sheetCenterlineBottomY - (PUNCH_FILLET + sheetThickPx / 2);
+                const dieFilletBottomY = DIE_SURFACE_Y_2D + DIE_FILLET;
+
+                if (remainingFlange > 0) {
+                    ctx2D.moveTo(CX_2D - dieRadiusPx - DIE_FILLET - remainingFlange, sheetRestY);
+                    ctx2D.lineTo(CX_2D - dieRadiusPx - DIE_FILLET, sheetRestY);
+                    ctx2D.arcTo(CX_2D - dieRadiusPx, sheetRestY, CX_2D - dieRadiusPx, dieFilletBottomY, DIE_FILLET + sheetThickPx / 2);
+                    
+                    ctx2D.lineTo(sheetWallLeft, punchFilletTopY);
+                    ctx2D.arcTo(sheetWallLeft, sheetCenterlineBottomY, CX_2D, sheetCenterlineBottomY, PUNCH_FILLET + sheetThickPx / 2);
+
+                    ctx2D.lineTo(CX_2D + PUNCH_RADIUS - PUNCH_FILLET, sheetCenterlineBottomY);
+
+                    ctx2D.arcTo(sheetWallRight, sheetCenterlineBottomY, sheetWallRight, punchFilletTopY, PUNCH_FILLET + sheetThickPx / 2);
+                    ctx2D.lineTo(CX_2D + dieRadiusPx, dieFilletBottomY);
+                    ctx2D.arcTo(CX_2D + dieRadiusPx, sheetRestY, CX_2D + dieRadiusPx + DIE_FILLET, sheetRestY, DIE_FILLET + sheetThickPx / 2);
+                    ctx2D.lineTo(CX_2D + dieRadiusPx + DIE_FILLET + remainingFlange, sheetRestY);
+                } else {
+                    const fullCupWall = blankRadius - ((PUNCH_RADIUS - PUNCH_FILLET) + punchCornerArc);
+                    const cupMouthY = sheetCenterlineBottomY - fullCupWall;
+
+                    ctx2D.moveTo(sheetWallLeft, cupMouthY);
+                    ctx2D.lineTo(sheetWallLeft, punchFilletTopY);
+                    ctx2D.arcTo(sheetWallLeft, sheetCenterlineBottomY, CX_2D, sheetCenterlineBottomY, PUNCH_FILLET + sheetThickPx / 2);
+
+                    ctx2D.lineTo(CX_2D + PUNCH_RADIUS - PUNCH_FILLET, sheetCenterlineBottomY);
+
+                    ctx2D.arcTo(sheetWallRight, sheetCenterlineBottomY, sheetWallRight, punchFilletTopY, PUNCH_FILLET + sheetThickPx / 2);
+                    ctx2D.lineTo(sheetWallRight, cupMouthY);
+                }
+            }
+            ctx2D.stroke();
+
+            // 5. رسم السنبك (إذا كان مفعلاً)
+            if (showPunch) {
+                ctx2D.fillStyle = '#1d4ed8';
+                ctx2D.strokeStyle = '#93c5fd';
+                ctx2D.lineWidth = 1.5;
+
+                ctx2D.beginPath();
+                ctx2D.moveTo(CX_2D - PUNCH_RADIUS, punchTopY);
+                ctx2D.lineTo(CX_2D - PUNCH_RADIUS, punchBottomY - PUNCH_FILLET);
+                ctx2D.arcTo(CX_2D - PUNCH_RADIUS, punchBottomY, CX_2D - PUNCH_RADIUS + PUNCH_FILLET, punchBottomY, PUNCH_FILLET);
+                ctx2D.lineTo(CX_2D + PUNCH_RADIUS - PUNCH_FILLET, punchBottomY);
+                ctx2D.arcTo(CX_2D + PUNCH_RADIUS, punchBottomY, CX_2D + PUNCH_RADIUS, punchBottomY - PUNCH_FILLET, PUNCH_FILLET);
+                ctx2D.lineTo(CX_2D + PUNCH_RADIUS, punchTopY);
+                ctx2D.closePath();
+                ctx2D.fill(); ctx2D.stroke();
+            }
+        }
+
+        // ================= حلقة الحركة المشتركة =================
+        function mainLoop() {
+            requestAnimationFrame(mainLoop);
+
+            if (isPlaying) {
+                strokeProgress += 0.007 * speedMult * animationDirection;
+                wavePhase += 0.08 * speedMult;
+
+                if (strokeProgress >= 1.0) {
+                    strokeProgress = 1.0;
+                    animationDirection = -1;
+                } else if (strokeProgress <= 0) {
+                    strokeProgress = 0;
+                    animationDirection = 1;
+                }
+            }
+
+            const currentPenetration = strokeProgress * maxStroke;
+
+            if (currentView === '2D') {
+                render2D(currentPenetration);
+            } else {
+                punchGroup3D.position.y = -currentPenetration;
+                punchGroup3D.visible = showPunch;
+                dieGroup3D.visible = showDie;
+                holderGroup3D.visible = showHolder;
+
+                update3DSheet(currentPenetration);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+        }
+
+        // ================= التبديل بين 2D و 3D =================
+        function switchView(view) {
+            currentView = view;
+            if (view === '2D') {
+                btn2D.classList.add('active');
+                btn3D.classList.remove('active');
+                canvas2D.style.display = 'block';
+                webglContainer.style.display = 'none';
+            } else {
+                btn3D.classList.add('active');
+                btn2D.classList.remove('active');
+                canvas2D.style.display = 'none';
+                webglContainer.style.display = 'block';
+                rebuild3DGeometries();
+            }
+        }
+
+        function setAngle(deg) {
+            angleSlider.value = deg;
+            sliceAngleDeg = deg;
+            sliceAngleRad = (deg * Math.PI) / 180;
+            angleVal.textContent = deg === 90 ? "90° (ربع)" : deg === 180 ? "180° (نصف)" : `${deg}°`;
+            if (currentView === '3D') rebuild3DGeometries();
+        }
+
+        chkPunch.addEventListener('change', (e) => { showPunch = e.target.checked; });
+        chkDie.addEventListener('change', (e) => { showDie = e.target.checked; });
+        chkHolder.addEventListener('change', (e) => { showHolder = e.target.checked; });
+
+        angleSlider.addEventListener('input', (e) => setAngle(parseInt(e.target.value)));
+
+        bhfSlider.addEventListener('input', (e) => {
+            bhf = parseFloat(e.target.value);
+            bhfVal.textContent = `${bhf} kN`;
+            updateFormulas();
+        });
+
+        thickSlider.addEventListener('input', (e) => {
+            t_mm = parseFloat(e.target.value);
+            thickVal.textContent = `${t_mm.toFixed(1)} mm`;
+            updateFormulas();
+            if (currentView === '3D') rebuild3DGeometries();
+        });
+
+        blankSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            blankVal.textContent = `${val} mm`;
+            blankRadius = val / 2;
+            updateFormulas();
+        });
+
+        speedSlider.addEventListener('input', (e) => {
+            speedMult = parseFloat(e.target.value);
+            speedVal.textContent = `${speedMult.toFixed(1)}x`;
+        });
+
+        playBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playBtn.textContent = isPlaying ? "إيقاف مؤقت" : "استئناف الحركة";
+        });
+
+        resetBtn.addEventListener('click', () => {
+            strokeProgress = 0;
+            animationDirection = 1;
+            isPlaying = false;
+            playBtn.textContent = "تشغيل الحركة";
+        });
+
+        stepBtn.addEventListener('click', () => {
+            isPlaying = false;
+            playBtn.textContent = "استئناف الحركة";
+            strokeProgress = Math.min(1.0, strokeProgress + 0.05);
+        });
+
+        // البدء الأولي
+        updateFormulas();
+        mainLoop();
+    </script>
+</body>
+</html>
